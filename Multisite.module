@@ -3,26 +3,27 @@
 /**
  *
  * Multisite module for Processwire
- * Inspired by Multisite module by authors: Ryan, Antti Peisa, Avoine Oy, Philipp "Soma" Urlich
+ * Inspired by Multisite module made by authors: Ryan, Antti Peisa, Avoine Oy, Philipp "Soma" Urlich
  *
- * complete rewrite of the original module
+ * complete rewrite of the original and forked modules
  *
  * @author Christoph Thelen aka @kixe 2017/03/25
- * @copyright 2017 Christoph Thelen
+ * @copyright © 2017 Christoph Thelen
  * @license Licensed under MIT, see LICENSE.txt
  * @link https://processwire.com/talk/topic/...
  * @version 1.0.0
  * @since 1.0.0 init - 2017/05/09
- * @since 1.0.1 default rootpage, domain related access control for MultisitePageTree, fixed path bug
- *
- * Copyright (c) 2017 by Christoph Thelen
- * Licensed under MIT, see LICENSE.txt
+ * @since 1.0.1 default rootpage, domain related access control for MultisitePageTree, fixed path bug - 2017/05/10
  *
  * FEATURES
  * - multilanguage support
  * - domain related homepage and custom 404 is set by id
  * - no restriction about naming, even multilanguage
  * - path modification is done by hooks
+ * - domain related access control of MultiSiteTree (shows 404 if doesn't match)
+ *
+ * REQUIREMENTS
+ * root page of any MultisitePageTree must be a child of original root page e.g. $page->get(1)
  *
  * SETTINGS
  * in config.php
@@ -117,7 +118,7 @@ class Multisite extends WireData implements Module {
 					break;
 				}
 			}
-		} else if (!$this->it) $this->langSegment = wire('pages')->get(1)->name.'/';
+		} else if (!$this->it) $this->langSegment = $this->languageSupport? wire('pages')->get(1)->name.'/':'/';
 		$this->rootPageName = isset($language->id)? $this->rootPage->get("name$language->id|name") : $this->rootPage->name;
 
 		$_GET['it'] = isset($_GET['it'])? $this->langSegment.$this->rootPageName."/". substr($this->it,strlen($this->langSegment)) : $this->langSegment.$this->rootPageName."/";
