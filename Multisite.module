@@ -13,6 +13,7 @@
  * @link https://processwire.com/talk/topic/...
  * @version 1.0.0
  * @since 1.0.0 init - 2017/05/09
+ * @since 1.0.1 default rootpage, domain related access control for MultisitePageTree, fixed path bug
  *
  * Copyright (c) 2017 by Christoph Thelen
  * Licensed under MIT, see LICENSE.txt
@@ -43,7 +44,7 @@ class Multisite extends WireData implements Module {
 	public $it = false; // sanitized $_GET['it'] if set
 
 	public $rootPage = null; // page instance of root page related to domain
-	public $rootPageID = 0; // page id of root page related to domain
+	public $rootPageID = 1; // page id of root page related to domain
 	public $rootPageName = ''; // language sensitive page name of root page related to domain
 
 	public $languageSupport = false;
@@ -51,7 +52,7 @@ class Multisite extends WireData implements Module {
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Multisite',
-			'version' => 100,
+			'version' => 101,
 			'summary' => 'Allows multiple sites with different domains run from single PW-site and database.',
 			'href' => 'https://github.com/somatonic/Multisite',
 			'singular' => true,
@@ -66,11 +67,11 @@ class Multisite extends WireData implements Module {
 			$this->domain = wire('config')->httpHost;
 			if (!array_key_exists('root', $this->domains[$this->domain])) throw new WireException("\$config->MultisiteDomains[$this->domain]['root'] not set");
 			$this->rootPageID = $this->domains[$this->domain]['root'];
+			$this->addHookAfter('AdminRestrictBranch::getBranchRootParentId', function($e) {
+				// ATTENTION: make hooked function protected and hookable first
+				$e->return = $this->rootPageID;
+			});		
 		}
-		$this->addHookAfter('AdminRestrictBranch::getBranchRootParentId', function($e) {
-			// ATTENTION: make hooked function protected and hookable first
-			$e->return = $this->rootPageID;
-		});
 	}
 
 	public function init() {
@@ -80,8 +81,8 @@ class Multisite extends WireData implements Module {
 		// settings ok?
 		$this->configCheck($this->domain);
 
-		// set http 404 page
-		wire("config")->http404PageID = (int) $this->domains[$this->domain]['http404'];
+		// set custom http 404 page
+		if (isset($this->domains[$this->domain]['http404'])) wire("config")->http404PageID = (int) $this->domains[$this->domain]['http404'];
 
 		// dirty $_GET['it']
 		if (isset($_GET['it']) && false === $this->it = $this->wire('sanitizer')->path($_GET['it'])) return;
@@ -100,11 +101,11 @@ class Multisite extends WireData implements Module {
 		// if called from PW front-end editing exit
 		if($this->wire("input")->post->action == "PageFrontEditSave") return;
 
-		// get root Page instance
-		$this->rootPage = wire('pages')->get($this->rootPageID);
-
 		// language support?
 		if (wire('modules')->isInstalled('LanguageSupportPageNames')) $this->languageSupport = true;
+
+		// get root Page instance
+		$this->rootPage = wire('pages')->get($this->rootPageID);
 
 		// modify $_GET['it']
 		$this->langSegment = '';
@@ -123,14 +124,30 @@ class Multisite extends WireData implements Module {
 		$this->addHookBefore('Page::render', $this, 'hookPageRender');
 	}
 
-	/**
+	 /**
+	 * Disallow access of pages residing in a MultisitePageTree for other domains other than the corresponding root page
+	 *
+	 */
+	public function ready() {
+		$pageTreeIDs = wire('page')->parents()->each('id');
+		$pageTreeIDs[] = wire('page')->id;
+		$multisiteRootIDs = array_map(function($i) { return $i = $i['root']; }, $this->domains);
+		$matches = array_intersect($multisiteRootIDs, $pageTreeIDs);
+		if (empty($matches)) return;
+		reset($matches);
+		if (key($matches) == wire('config')->httpHost) return;
+		$view = new ProcessPageView();	
+		$view->pageNotFound(wire('page'), $this->it, true, 'access not allowed');
+	}
+
+	 /**
 	 * Hook Page::render hooks Page::path and LanguageSupportPageNames::getPagePath
 	 *
 	 * @param  HookEvent $e
 	 * @see hookPagePath()
 	 * @todo make hookable LanguageSupportPageNames::getPagePath
 	 */
-	public function hookPageRender(HookEvent $e) {
+	protected function hookPageRender(HookEvent $e) {
 		if ($this->languageSupport) $this->wire()->addHookAfter('LanguageSupportPageNames::getPagePath', $this, 'hookPagePath');
 		else $this->wire()->addHookAfter('Page::path', $this, 'hookPagePath');
 	}
@@ -156,6 +173,7 @@ class Multisite extends WireData implements Module {
 			$e->return = '/';
 		}
 		else {
+			if (strpos($e->return, $this->rootPageName) !== strlen($this->langSegment) + 1) return;
 			$cut = strlen($this->langSegment) + strlen($this->rootPageName) + 2;
 			$e->return = '/'.$this->langSegment.substr($e->return, $cut);
 		}
