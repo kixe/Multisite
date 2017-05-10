@@ -11,9 +11,10 @@
  * @copyright © 2017 Christoph Thelen
  * @license Licensed under MIT, see LICENSE.txt
  * @link https://processwire.com/talk/topic/...
- * @version 1.0.0
+ * @version 1.0.2
  * @since 1.0.0 init - 2017/05/09
  * @since 1.0.1 default rootpage, domain related access control for MultisitePageTree, fixed path bug - 2017/05/10
+ * @since 1.0.2 fixed root page path issue in single language mode FORCE $page->template->slashUrls for rootPage - 2017/05/10
  *
  * FEATURES
  * - multilanguage support
@@ -53,7 +54,7 @@ class Multisite extends WireData implements Module {
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Multisite',
-			'version' => 101,
+			'version' => 102,
 			'summary' => 'Allows multiple sites with different domains run from single PW-site and database.',
 			'href' => 'https://github.com/somatonic/Multisite',
 			'singular' => true,
@@ -68,10 +69,12 @@ class Multisite extends WireData implements Module {
 			$this->domain = wire('config')->httpHost;
 			if (!array_key_exists('root', $this->domains[$this->domain])) throw new WireException("\$config->MultisiteDomains[$this->domain]['root'] not set");
 			$this->rootPageID = $this->domains[$this->domain]['root'];
+			/*
 			$this->addHookAfter('AdminRestrictBranch::getBranchRootParentId', function($e) {
 				// ATTENTION: make hooked function protected and hookable first
-				$e->return = $this->rootPageID;
-			});		
+				// $e->return = $this->rootPageID;
+			});
+			*/		
 		}
 	}
 
@@ -85,10 +88,10 @@ class Multisite extends WireData implements Module {
 		// set custom http 404 page
 		if (isset($this->domains[$this->domain]['http404'])) wire("config")->http404PageID = (int) $this->domains[$this->domain]['http404'];
 
-		// dirty $_GET['it']
-		if (isset($_GET['it']) && false === $this->it = $this->wire('sanitizer')->path($_GET['it'])) return;
+		$superRootURL = $this->wire('config')->urls->root; // could be '/' or '/subfolder/'
 
-		$superRootURL = $this->wire('config')->urls->root; // could this be anything else than '/'?
+		// dirty $_GET['it']
+		if (isset($_GET['it'])) $this->it = $this->wire('sanitizer')->path($_GET['it']);
 
 		// if in admin exit
 		if(strpos($superRootURL . $this->it, $this->wire('config')->urls->admin) === 0) return;
@@ -107,21 +110,26 @@ class Multisite extends WireData implements Module {
 
 		// get root Page instance
 		$this->rootPage = wire('pages')->get($this->rootPageID);
+		$this->rootPageName = $this->rootPage->name;
+
+		// prevent redirect after modification
+		if ($this->it && substr("$this->it", -1) != '/' && $this->rootPage->template->slashUrls == 1) $this->wire('session')->redirect("/$this->it/");
 
 		// modify $_GET['it']
-		$this->langSegment = '';
-		if ($this->languageSupport && $this->it) {
-			foreach ($this->wire('languages') as $language) {
-				$lang = $language->id;
-				$this->langSegment = wire('pages')->get(1)->get("name$lang|name").'/';
-				if (strpos($this->it, $this->langSegment) === 0) {
-					break;
-				}
+		if ($this->languageSupport) {
+			if ($this->it) {
+				$it = explode('/',$this->it);
+				array_splice($it, 1, 0, $this->rootPageName); // splice in at position 1
+				$it = implode('/',$it);
 			}
-		} else if (!$this->it) $this->langSegment = $this->languageSupport? wire('pages')->get(1)->name.'/':'/';
-		$this->rootPageName = isset($language->id)? $this->rootPage->get("name$language->id|name") : $this->rootPage->name;
+			else {
+				$lang = wire('pages')->get(1)->name.'/';
+				$it = "$lang$this->rootPageName/";
+			}
+		}
+		else $it = $this->it? "$this->rootPageName/$this->it" : "$this->rootPageName/";
 
-		$_GET['it'] = isset($_GET['it'])? $this->langSegment.$this->rootPageName."/". substr($this->it,strlen($this->langSegment)) : $this->langSegment.$this->rootPageName."/";
+		$_GET['it'] = $it;
 		$this->addHookBefore('Page::render', $this, 'hookPageRender');
 	}
 
@@ -130,7 +138,8 @@ class Multisite extends WireData implements Module {
 	 *
 	 */
 	public function ready() {
-		$pageTreeIDs = wire('page')->parents()->each('id');
+		if ($this->wire('user')->isSuperuser()) return;
+		$pageTreeIDs = $this->wire('page')->parents()->each('id');
 		$pageTreeIDs[] = wire('page')->id;
 		$multisiteRootIDs = array_map(function($i) { return $i = $i['root']; }, $this->domains);
 		$matches = array_intersect($multisiteRootIDs, $pageTreeIDs);
@@ -162,10 +171,15 @@ class Multisite extends WireData implements Module {
 	protected function hookPagePath(HookEvent $e) {
 		// call from LanguageSupportPageNames
 		if (isset($e->arguments[1])) {
+			$page = $e->arguments[0];
 			$lid = $e->arguments[1]->id;
 			$this->langSegment = wire('pages')->get(1)->get("name$lid|name").'/';
-			$this->rootPageName = $this->rootPage->localName($lid);
+			$this->rootPageName = $this->rootPage->get("name$lid|name");
+		} else {
+			$page = $e->object;
 		}
+		// we need a slash here
+		if ($page == $this->rootPage) $this->rootPage->template->slashUrls = 1;
 
 		if ($this->languageSupport
 		&& wire('modules')->get('LanguageSupportPageNames')->useHomeSegment == 0
