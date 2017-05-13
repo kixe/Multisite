@@ -17,12 +17,13 @@ Yes, [kind of](https://processwire.com/api/modules/multi-site-support/). It allo
 ## What is different to the initial versions of this module?
 - Do not worry about page naming. The root page is defined via ID.
 - Full multilanguage support
-- take in account`$template->slashUrl` settings
-- Fallback to default 404 page if not set
+- take in account `$template->slashUrl` settings
+- take in account `LanguageSupportPagenames::useHomeSegment` settings
+- Fallback to default 404 page if custom 404 is not set
 - Throws exception in case of misconfiguration
-- Access of pages residing in a MultisitePageTree for other domains other than the corresponding root page is disallowed except for superuser
+- Access of pages residing inside a MultisitePageTree for other domains other than the corresponding root page is disallowed except for superuser
 - Pages inside a MultisitePageTree accessible only via url based on to the corresponding domain (404 instead of unexpected redirects)
-- Page paths are set via hook in Page::path() instead of modifying the return of Page::render()
+- Page paths are set via hook in `Page::path()` instead of modifying the return of `Page::render()`
 - Crosslink support via the RTE (CK Editor) Link plugin
 - Page view links in admin with correctly modified urls
   
