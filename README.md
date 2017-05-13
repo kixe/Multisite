@@ -1,110 +1,78 @@
-# Multisite module for Processwire (WIP)
+# Multisite module for ProcessWire
+Complete rewrite of Multisite Module.
+The basic module was written by Antti Peisa and forked by Philipp "Soma" Urlich (_"not much left from the original module and fork, but the basic concept is the same"_).
 
-The basic module was written by Antti Peisa and forked by Philipp "Soma" Urlich (_"there's not much left from the original module, but the basic concept is the same"_).
-
+* [Github: Multisite](https://github.com/kixe/Multisite) by Christoph Thelen aka @kixe  
 * [Github: Multisite](https://github.com/somatonic/Multisite) by Philipp "Soma" Urlich
 * [Github: Multisite](https://github.com/apeisa/Multisite) by Antti Peisa – **deprecated**
 * [ProcessWire Forum](https://processwire.com/talk/topic/1025-multisite/)
+[ProcessWire Forum](https://processwire.com/talk/topic/1025-multisite/)
 
 ## What does this module do?
-
-It allows you to run multiple sites with different domains from a single install, using the same database.
-While you can easily do _"subsites"_ like `www.domain.com/campaign/`, this allows you to turn that into `www.campaign.com`.
-This is nice stuff when you have multiple simple sites which all belong to the same organisation and which the same people maintain.
+It allows you to run multiple sites with different domains from a single install, using the same database, same site folder, same modules, templates and core settings.
 
 ## Isn't there multisite support in core?
+Yes, [kind of](https://processwire.com/api/modules/multi-site-support/). It allows you to run multiple pw-installations with shared core files (/wire/ folder) but with site folders (templates, custom modules) and databases for each installation.
 
-Yes, [kind of](https://processwire.com/api/modules/multi-site-support/). It is very different from this. It allows you to run multiple pw-installations with shared core files (/wire/ folder).
-This is totally different: this is a single pw-installation which has multiple sites running from different domains.
-
+## What is different to the initial versions of this module?
++ Do not worry about page naming. The root page is defined via ID.
++ Full multilanguage support*
+<small>*needs LanguageSupportPageNames installed</small>
++ respects `$template->slashUrl` settings
++ fallback to default 404 page if not set
++ throws exception in case of misconfiguration
++ Access of pages residing in a MultisitePageTree for other domains other than the corresponding root page is disallowed except superuser
++ pages outside the MultisitePageTree are not accessible (404 instead of redirects)
++ page paths are set via hook in `Page::path()` instead of modifying the return of `Page::render()` 
++ crosslinking works via the CK Editor Link plugin 
++ page view links in admin with correctly modified urls
+  
 ## How to use it?
-
-Just create pages with names like `www.campaigndomain.com` unter the root page and add these in the `config.php` via an array in `$config->MultisiteDomains`.
-
-This allows for different domain configurations on different environments like dev and live stage, and since it's not in DB (via the module config) it can be easily transfered with a dump without worrying to overwrite or change the settings.
-
-Also there's no need to change the domain "root" pages name, as it's not directly coupled to the requesting domain.
-So you only change the array keys (=domain).
+Just create pages under the root page and add these in the `config.php` by setting `$config->MultisiteDomains`.
 
 ### Add MultisiteDomains
-
-#### Live environment
-
 ```php
 $config->MultisiteDomains = array(
-    "domain1.com" => array( // domain name is used to map to root page
-            "root" => "www.domain1.com", // page name for the root page
-            "http404" => 27
+    "example.com" => array( // domain name is used to map to root page
+            "root" => 1027, // page id
         ),
-    "domain2.com" => array(
-            "root" => "www.domain2.com",
-            "http404" => 5332
+    "example.org" => array(
+            "root" => 1028,
+            "http404" => 1029 // custom 404 page
         )
 );
 ```
 
-#### Override for dev environment
 
+### Requirements  
++ All multisite root pages must be child pages of the original root page*
+<small>*Page with id=1</small>
+
+### httpHosts setup
 ```php
-$config->MultisiteDomains = array(
-    "dev.domain1.com" => array( // domain name is used to map to root page
-            "root" => "www.domain1.com", // page name for the root page
-            "http404" => 27
-        ),
-    "dev.domain2.com" => array(
-            "root" => "www.domain2.com",
-            "http404" => 5332
-        )
-);
-```
+/**
+ * HTTP Hosts Whitelist
+ * 
+ */
+ $config->httpHosts = array('nomultisite.com');
 
-**Notes**: The page namen for the root page should be carefully taken. It should be as unique as possible, but kept short. it doesn't have to be the domain name 1:1, but can be any string, word or phrase.
-
-For example a name like "event" would be a bad choice, since there might be other pages named "event" in your site, that could lead to problems with the module trying to resolve a requested URL that still contains a domain root name in the URL.
-
-
-### Add urls to httpHosts depending on environment
-
-#### Live environment
-
-```php
-$config->httpHosts = array('domain.com', 'domain2.com');
-```
-
-#### Dev environment
-
-```php
-$config->httpHosts = array('dev.domain.com', 'dev.domain2.com');
-```
-
-#### Automatic httpHosts setup
-
-```php
-$config->MultisiteDomains = […];
-$config->httpHosts = array_keys($config->MultisiteDomains);
+/**
+ * Multisite domain settings
+ * 
+ */
+ $config->MultisiteDomains = […];
+ 
+/**
+ * Merge Multisitedomains in $config->httpHosts to set the correct $config->httpHost
+ * 
+ */
+$config->httpHosts = array_unique(array_merge($config->httpHosts, array_keys($config->MultisiteDomains)));
 ```
 
 ### Domains
-
-Make sure **domain2.com** points to the same server (A record or CNAME) as **domain1.com** and so on.
-And on the server side you have to make sure that **domain2.com** is pointing to the same directory as **domain1.com**.
-
-### Build the page tree
-
-```
-- Web (PW root page, I call it always "Web" since it isn't the homepage anymore)
-   - www.domain1.com (primary site home)
-     - Example Page
-     - 404 Page
-     - Contact Page
-   - www.domain2.com (a second site home)
-     - 404 Page
-   ...
-
-```
+Make sure all domains points to the same server and directory.
 
 ### Good to know: some variables
-
 ```php
 // get current domain
 echo $modules->get('Multisite')->domain;
@@ -141,28 +109,28 @@ foreach ($siteRoot->children as $child) {
 But this wasn't ever recommended and it can lead to complications.
 
 #### Domains are missing insite httpHosts
-
 Check that all domains for the specific environment are included inside `$config->httpHosts`.
 
 #### DNS Record is not set properly
-
 The DNS Record of all domains must point to the same server.
 
 #### Domains point to a wrong directory
-
 All domains must point to the same directory.
 
 #### Multi-language Domains are not working
-
 Make sure the **LanguageSupportPageNames** module is installed.
 
-Edit the root page in the example above called *Web*  and add language paths there. For example `en`, `de` and `fr` depending on the added languages.
-
+### modified API Vars
++ `$page->url`
++ `$page->httpUrl`
++ `$page->path`
++ `$page->localPath()`
++ `$page->localUrl()`
++ `$page->localHttpUrl()`
+   
 ### Important
+This module doesn't provide new API vars and your templates doesn't know about this module (except the modified API vars). You have to use the ProcessWire API in the same way as in a single site environment.
+  
+## Please try out and let me know how it works!
 
-Since the whole concept is all a pretty hack, I found that it comes with some complications that can't be solved in an elegant way. So for example the biggest issue is that you can't crosslink pages via the RTE Link plugin, since it doesn't know about Multisite. So you'll end with wrong URL's when for example you link from a page of one site to a page of another site. If that's an issue it's still possible to copy the ProcessPageEditLink.module and modify the root parent for the page tree select. I'd be glad to help out with an example there.
-
-Again since this module is pretty much a hack, I'm not officially supporting and releasing this module. Use at your own risk. We use it in various projects now and while it works fine with all it's little drawbacks, this version is little more solid.
-
-I would rather like to see if there's a way for a more integrated and supported way in core. But I'm not even sure how this could work out. Ryan may has some ideas or maybe thinks this isn't something PW could support. - Note that there's [multisite core support](https://processwire.com/api/modules/multi-site-support/), but it's for different DB's and "site" folders, but that's a different case altogether.
 
