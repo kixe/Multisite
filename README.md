@@ -15,17 +15,16 @@ It allows you to run multiple sites with different domains from a single install
 Yes, [kind of](https://processwire.com/api/modules/multi-site-support/). It allows you to run multiple pw-installations with shared core files (/wire/ folder) but with site folders (templates, custom modules) and databases for each installation.
 
 ## What is different to the initial versions of this module?
-+ Do not worry about page naming. The root page is defined via ID.
-+ Full multilanguage support*
-<small>*needs LanguageSupportPageNames installed</small>
-+ respects `$template->slashUrl` settings
-+ fallback to default 404 page if not set
-+ throws exception in case of misconfiguration
-+ Access of pages residing in a MultisitePageTree for other domains other than the corresponding root page is disallowed except superuser
-+ pages outside the MultisitePageTree are not accessible (404 instead of redirects)
-+ page paths are set via hook in `Page::path()` instead of modifying the return of `Page::render()` 
-+ crosslinking works via the CK Editor Link plugin 
-+ page view links in admin with correctly modified urls
+- Do not worry about page naming. The root page is defined via ID.
+- Full multilanguage support
+- take in account`$template->slashUrl` settings
+- Fallback to default 404 page if not set
+- Throws exception in case of misconfiguration
+- Access of pages residing in a MultisitePageTree for other domains other than the corresponding root page is disallowed except for superuser
+- Pages inside a MultisitePageTree accessible only via url based on to the corresponding domain (404 instead of unexpected redirects)
+- Page paths are set via hook in Page::path() instead of modifying the return of Page::render()
+- Crosslink support via the RTE (CK Editor) Link plugin
+- Page view links in admin with correctly modified urls
   
 ## How to use it?
 Just create pages under the root page and add these in the `config.php` by setting `$config->MultisiteDomains`.
