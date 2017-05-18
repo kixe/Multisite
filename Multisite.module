@@ -60,7 +60,7 @@ class Multisite extends WireData implements Module {
 			'title' => 'Multisite',
 			'version' => 103,
 			'summary' => 'Allows multiple sites with different domains run from single PW-site and database.',
-			'href' => 'https://github.com/somatonic/Multisite',
+			'href' => 'https://github.com/kixe/Multisite',
 			'singular' => true,
 			'autoload' => true
 			);
