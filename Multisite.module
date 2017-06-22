@@ -11,12 +11,16 @@
  * @copyright © 2017 Christoph Thelen
  * @license Licensed under MIT, see LICENSE.txt
  * @link https://processwire.com/talk/topic/...
- * @version 1.0.3
+ * @version 1.0.4
  * @since 1.0.0 init - 2017/05/09
  * @since 1.0.1 default rootpage, domain related access control for MultisitePageTree, fixed path bug - 2017/05/10
  * @since 1.0.2 fixed root page path issue in single language mode FORCE $page->template->slashUrls for rootPage - 2017/05/10
  * @since 1.0.3 fixed issue other language rootPageName, let hook modify Page view urls in admin too, take in account slashUrl and useHomeSegment settings - 2017/05/13
- * @todo modify page view links in admin (if accessed from non superuser and multisite domain)
+ * @since 1.0.4 show warning if hooked methods are not hookable - 2017/06/22
+ * @todo
+ * - modify ProcessPageList::executeNavJSON() Change $parentID from hardcoded 1 to $config->rootPageID to get proper results Pages > Tree
+ * - make hookable core function LanguageSupportPageNames::getPagePath() for proper Language support
+ * - make hookable core function AdminRestrictBranch::getBranchRootParentId() to get it working together
  *
  * FEATURES
  * - multilanguage support
@@ -58,7 +62,7 @@ class Multisite extends WireData implements Module {
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Multisite',
-			'version' => 103,
+			'version' => 104,
 			'summary' => 'Allows multiple sites with different domains run from single PW-site and database.',
 			'href' => 'https://github.com/kixe/Multisite',
 			'singular' => true,
@@ -74,11 +78,14 @@ class Multisite extends WireData implements Module {
 			if (!array_key_exists('root', $this->domains[$this->domain])) throw new WireException("\$config->MultisiteDomains[$this->domain]['root'] not set");
 			$this->rootPageID = $this->domains[$this->domain]['root'];
 			
-			$this->addHookAfter('AdminRestrictBranch::getBranchRootParentId', function($e) {
-				// ATTENTION: make hooked function protected and hookable first
-				$e->return = $this->rootPageID;
-			});
-				
+			// This module works properly together with AdminRestrictBranch if getBranchRootParentId() is modified and hookable
+			if ($this->wire('modules')->isInstalled('AdminRestrictBranch')) {
+				if (method_exists('AdminRestrictBranch', '___getBranchRootParentId')) {
+				$this->addHookAfter('AdminRestrictBranch::getBranchRootParentId', function($e) {
+						$e->return = $this->rootPageID;
+					});
+				} else $this->warning('AdminRestrictBranch::getBranchRootParentId() is not hookable');
+			}			
 		}
 	}
 
@@ -110,7 +117,11 @@ class Multisite extends WireData implements Module {
 		if($this->wire("input")->post->action == "PageFrontEditSave") return;
 
 		// language support?
-		if ($this->wire('modules')->isInstalled('LanguageSupportPageNames')) $this->languageSupport = true;
+		if ($this->wire('modules')->isInstalled('LanguageSupportPageNames')) {
+			$this->languageSupport = true;
+			$namespace = (ProcessWire::versionMajor == 3)? 'ProcessWire\\':'';
+			if (!method_exists("{$namespace}LanguageSupportPageNames", '___getPagePath')) $this->warning('LanguageSupportPageNames::getPagePath() is not hookable');
+		}
 
 		// get root page instance
 		$this->rootPage = $this->wire('pages')->get($this->rootPageID);
