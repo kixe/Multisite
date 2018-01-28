@@ -11,28 +11,33 @@
  * @copyright © 2017 Christoph Thelen
  * @license Licensed under MIT, see LICENSE.txt
  * @link https://processwire.com/talk/topic/...
- * @version 1.0.4
+ * @version 2.0.0
  * @since 1.0.0 init - 2017/05/09
  * @since 1.0.1 default rootpage, domain related access control for MultisitePageTree, fixed path bug - 2017/05/10
  * @since 1.0.2 fixed root page path issue in single language mode FORCE $page->template->slashUrls for rootPage - 2017/05/10
  * @since 1.0.3 fixed issue other language rootPageName, let hook modify Page view urls in admin too, take in account slashUrl and useHomeSegment settings - 2017/05/13
  * @since 1.0.4 show warning if hooked methods are not hookable - 2017/06/22
+ * @since 2.0.0 major upgrade, root page of any MultisitePageTree can be placed elsewhere in the pagetree - 2018/01/26
  * @todo
  * - modify ProcessPageList::executeNavJSON() Change $parentID from hardcoded 1 to $config->rootPageID to get proper results Pages > Tree
- * - make hookable core function LanguageSupportPageNames::getPagePath() for proper Language support
+ * - make hookable core function LanguageSupportPageNames::getPagePath() for proper language support
  * - make hookable core function AdminRestrictBranch::getBranchRootParentId() to get it working together
  *
  * FEATURES
  * - multilanguage support
+ * - LanguageSupportPageName::useHomeSegment support
+ * - slashUrl support 
  * - domain related homepage and custom 404 is set by id
- * - no restriction about naming, even multilanguage
+ * - no restriction about domain and page naming, even multilanguage
  * - path modification is done by hooks
+ * - auto modification of view links in backend
  * - domain related access control of MultiSiteTree (shows 404 if doesn't match)
+ * - root page of a Multisite page tree can be placed elsewhere in the ProcessWire page tree
  *
  * REQUIREMENTS
- * root page of any MultisitePageTree must be a child of original root page e.g. $page->get(1)
+ * For a proper multilanguage support a page name for the default language and any other language must be assigned to the superRoot page
  *
- * SETTINGS
+ * SETUP
  * in config.php
  * $config->MultisiteDomains = array(
  *		"example.com" => array( // domain name is used to map to root page allow subdomains
@@ -47,22 +52,25 @@
 
 class Multisite extends WireData implements Module {
 
-	public $domains = null; // settings array $config->MultisiteDomains
-	public $domain = null; // $config->httpHost
-	public $it = false; // sanitized $_GET['it'] if set
-
-	public $page = null;
-	public $rootPage = null; // page instance of root page related to domain
+	// set by constructor
+	public $domains = array(); // settings array $config->MultisiteDomains
+	public $domain = null; // null/string $config->httpHost if item key of $config->MultisiteDomains
 	public $rootPageID = 1; // page id of root page related to domain
-	public $rootPageName = ''; // language sensitive page name of root page related to domain
+	public $languageSupport = false; // runtime true if LanguageSupportPageNames is installed
+	public $useHomeSegment = "0"; // string "0" or "1" runtime LanguageSupportPageNames::useHomeSegment
+	public $it = ''; // string sanitized $_GET['it'] if set
 
-	public $languageSupport = false;
-	public $isAdmin = false;
+	// set by init()
+	public $rootPage = null; // page object, instance of root page related to domain
+	public $rootPagePath = ''; // language sensitive page path of root page (related to domain)
+	public $language = null; // request is default language
+	public $homeSegment = ''; // 
+	public $page = null; // page object, page to be rendered
 
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Multisite',
-			'version' => 104,
+			'version' => 200,
 			'summary' => 'Allows multiple sites with different domains run from single PW-site and database.',
 			'href' => 'https://github.com/kixe/Multisite',
 			'singular' => true,
@@ -77,6 +85,13 @@ class Multisite extends WireData implements Module {
 			$this->domain = $this->wire('config')->httpHost;
 			if (!array_key_exists('root', $this->domains[$this->domain])) throw new WireException("\$config->MultisiteDomains[$this->domain]['root'] not set");
 			$this->rootPageID = $this->domains[$this->domain]['root'];
+
+			// language support
+			if ($this->wire('modules')->isInstalled('LanguageSupportPageNames')) {
+				$this->languageSupport = true;
+				$namespace = (ProcessWire::versionMajor == 3)? 'ProcessWire\\':'';
+				if (!method_exists("{$namespace}LanguageSupportPageNames", '___getPagePath')) $this->warning('LanguageSupportPageNames::getPagePath() is not hookable');
+			}
 			
 			// This module works properly together with AdminRestrictBranch if getBranchRootParentId() is modified and hookable
 			if ($this->wire('modules')->isInstalled('AdminRestrictBranch')) {
@@ -85,30 +100,30 @@ class Multisite extends WireData implements Module {
 						$e->return = $this->rootPageID;
 					});
 				} else $this->warning('AdminRestrictBranch::getBranchRootParentId() is not hookable');
-			}			
+			}
+
+			// sanitize $_GET['it']
+			if (isset($_GET['it'])) $this->it = $this->wire('sanitizer')->path($_GET['it']);
 		}
 	}
 
 	public function init() {
 		// quick exit
-		if(empty($this->domains) || $this->domain == null) return;
+		if(empty($this->domains) || $this->domain == null || $this->rootPageID == 1) return;
 
 		// settings ok?
 		$this->configCheck($this->domain);
 
 		// set custom http 404 page
-		if (isset($this->domains[$this->domain]['http404'])) $this->wire("config")->http404PageID = (int) $this->domains[$this->domain]['http404'];
+		if (isset($this->domains[$this->domain]['http404'])) $this->wire("config")->http404PageID = $this->domains[$this->domain]['http404'];
 
 		$superRootURL = $this->wire('config')->urls->root; // could be '/' or '/subfolder/'
 
-		// dirty $_GET['it']
-		if (isset($_GET['it'])) $this->it = $this->wire('sanitizer')->path($_GET['it']);
+		// if it's /site/ folder exit
+		if(strpos($superRootURL . $this->it, $this->wire('config')->urls->site) === 0) return;
 
-		// if in admin set flag
-		if(strpos($superRootURL . $this->it, $this->wire('config')->urls->admin) === 0) $this->isAdmin = true;
-
-		// if it's an assets file exit
-		if(strpos($superRootURL . $this->it, $this->wire('config')->urls->assets) === 0) return;
+		// if it's /wire/ folder exit
+		if(strpos($superRootURL . $this->it, $this->wire('config')->urls->wire) === 0) return;
 
 		// if it's form-builder exit
 		if(strpos($superRootURL . $this->it, "/form-builder/") !== false) return;
@@ -116,55 +131,55 @@ class Multisite extends WireData implements Module {
 		// if called from PW front-end editing exit
 		if($this->wire("input")->post->action == "PageFrontEditSave") return;
 
-		// language support?
-		if ($this->wire('modules')->isInstalled('LanguageSupportPageNames')) {
-			$this->languageSupport = true;
-			$namespace = (ProcessWire::versionMajor == 3)? 'ProcessWire\\':'';
-			if (!method_exists("{$namespace}LanguageSupportPageNames", '___getPagePath')) $this->warning('LanguageSupportPageNames::getPagePath() is not hookable');
-		}
-
-		// get root page instance
+		// set root page
 		$this->rootPage = $this->wire('pages')->get($this->rootPageID);
-		$this->rootPageName = $this->rootPage->name;
-		$this->page = $this->wire('pages')->get("path=/".trim($this->it,'/').'/');
-		if (!$this->page->id) $this->page = $this->rootPage;
-		$slash = $this->page->template->slashUrls? '/' : '';
 
-		// redirect if $_GET['it'] doesn't match template->slashUrls settings
-		if ($this->it && $this->isAdmin === false) {
-			if ($this->page->template->slashUrls == 1 && substr($this->it, -1) != '/') $this->wire('session')->redirect("/$this->it/");
-			if ($this->page->template->slashUrls == 0 && substr($this->it, -1) == '/')  $this->wire('session')->redirect("/".rtrim($this->it,'/'));
-		}
+		// modify $_GET['it'] if not admin
+		if(strpos($superRootURL . trim($this->it.'/') . '/', $this->wire('config')->urls->admin) !== 0) {
+			$this->isAdmin = true;
 
-		// modify $_GET['it']
-		// multi language
-		if ($this->languageSupport) {
-			if ($this->it) {
-				$it = explode('/',$this->it);
-				$lid = $this->getLanguageIdByPageName($this->wire('pages')->get(1), $it[0]);
-				$this->rootPageName = $this->rootPage->get("name$lid|name");
-				array_splice($it, 1, 0, $this->rootPageName); // splice in at position 1
+			if ($this->languageSupport) {
+				$this->useHomeSegment = $this->wire('modules')->get('LanguageSupportPageNames')->useHomeSegment;
+				$this->language = $this->wire('languages')->getDefault();
+				$it = array_filter(explode('/',$this->it));
+				$homeSegment = (empty($it))? $this->getHomeSegment() : $this->getHomeSegment($it[0]);
+			}
+
+			// get rootPagePath in requested language
+			$this->rootPagePath = $this->getPagePathSegment($this->rootPage, $this->wire('pages')->get(1), $this->language);
+
+			if ($this->languageSupport) {
+				if ($homeSegment && empty($it)) array_unshift($it, $homeSegment);
+				array_splice($it, 1, 0, $this->rootPagePath); // multi language - splice in at position 1
 				$it = implode('/',$it);
 			}
-			else { // is homepage
-				$lang = $this->wire('pages')->get(1)->name.'/';
-				$it = "$lang$this->rootPageName$slash";
-				if ($this->wire('modules')->get('LanguageSupportPageNames')->useHomeSegment) $this->wire('session')->redirect("$this->rootPageName$slash");
-			}
-		}
-		// single language
-		else $it = $this->it? "$this->rootPageName/$this->it" : "$this->rootPageName$slash"; // just prepend
+			else $it = "$this->rootPagePath/$this->it"; // case single language - just prepend
 
+			// get requested page and update slash
+			$this->page = $this->wire('pages')->get("path=/".trim($it,'/').'/');
+			$slash = ($this->page->id && $this->page->template->slashUrls)? '/' : '';
+
+			// redirect if $_GET['it'] doesn't match LanguageSupportPageNames::useHomeSegment setting
+			if ($this->languageSupport && $this->rootPage == $this->page) {
+				if ($this->useHomeSegment && $this->it != $homeSegment.$slash) $this->wire('session')->redirect("/$homeSegment$slash");
+				if (!$this->useHomeSegment && $this->it == $homeSegment.$slash) $this->wire('session')->redirect("/");
+			}
+
+			// redirect if $_GET['it'] doesn't match $page->template->slashUrls setting
+			if ($this->it) {
+				if ($slash && substr($this->it, -1) != '/') $this->wire('session')->redirect("/$this->it/");
+				if (!$slash && $this->page && substr($this->it, -1) == '/')  $this->wire('session')->redirect("/".rtrim($this->it,'/'));
+			}
+
+			$_GET['it'] = trim($it,'/').$slash;
+		}
+		
 		// add path hook
 		$this->addHookBefore('Page::render', $this, 'hookPageRender');
-
-		// set $_GET['it']
-		if ($this->isAdmin === false) $_GET['it'] = $it;
 	}
 
 	/**
-	 * Disallow access of pages residing in a MultisitePageTree for other domains other than the corresponding root page
-	 *
+	 * Disallow access of pages residing in a MultisitePageTree for domains other than the corresponding root page
 	 */
 	public function ready() {
 		if ($this->wire('user')->isSuperuser()) return;
@@ -174,31 +189,15 @@ class Multisite extends WireData implements Module {
 		$matches = array_intersect($multisiteRootIDs, $pageTreeIDs);
 		if (empty($matches)) return;
 		reset($matches);
-		if (key($matches) == $this->wire('config')->httpHost) return;
+		if (in_array($this->domain, array_keys($matches))) return;
 		$view = new ProcessPageView();	
 		$view->pageNotFound($this->wire('page'), $this->it, true, 'access not allowed');
 	}
 
 	/**
-	 * Get language by page name
-	 * @param  $page Page object
-	 * @param  $name string
-	 * @return bool/int language->id
-	 *
-	 */
-	public function getLanguageIdByPageName(Page $page, $name) {
-		if(!$this->modules->isInstalled("LanguageSupportPageNames")) return false;
-		foreach($this->wire('languages') as $language) {
-			$pageName = $page->get("name$language->id|name");
-			if ($pageName == $name) return $language->id;
-		}
-		return false;
-	}
-
-	/**
 	 * Hook Page::render hooks Page::path and LanguageSupportPageNames::getPagePath
 	 *
-	 * @param  HookEvent $e
+	 * @param HookEvent $e
 	 * @see hookPagePath()
 	 * @todo make hookable LanguageSupportPageNames::getPagePath
 	 */
@@ -212,37 +211,83 @@ class Multisite extends WireData implements Module {
 	 * modifies $page->url, $page->httpUrl, $page->path, $page->localPath() $page->localUrl(), $page->localHttpUrl()
 	 * modifies page view urls ProcessPageListActions::getActions ProcessPageEdit::buildFormView
 	 * @param  HookEvent $e
-	 * @see hookPageRender()
+	 * @see hookPageRender(),
 	 */
 	protected function hookPagePath(HookEvent $e) {
-		// call from LanguageSupportPageNames
-		if (isset($e->arguments[1])) {
-			$lid = $e->arguments[1]->id;
-			$this->langSegment = $this->wire('pages')->get(1)->get("name$lid|name").'/';
-			$this->rootPageName = $this->rootPage->get("name$lid|name");
-		} 
-		if ($this->languageSupport
-		&& $this->wire('modules')->get('LanguageSupportPageNames')->useHomeSegment == 0
-		&& $this->wire('user')->language->isDefault()
-		&& $e->object == $this->rootPage) {
-			$e->return = '/';
+
+		$page = isset($e->arguments[0])? $e->arguments[0] : $e->object;
+		if ($page->id == 1) return;
+		$language = isset($e->arguments[1])? $e->arguments[1] : '';
+		$cut = $this->getPagePathSegment($this->rootPage, $this->wire('pages')->get(1), $language);
+		if ($cut === false) return;
+
+		if ($page == $this->rootPage) {
+			$homeSegment = $this->getHomeSegment($language);
+			if ($language instanceof Language && $language->isDefault() && (!$homeSegment || $this->useHomeSegment == '0')) $e->return = '/';
+			else $e->return = $page->template->slashUrls? "/$homeSegment/" : "/$homeSegment";
 		}
-		else {
-			if (strpos($e->return, $this->rootPageName) !== strlen($this->langSegment) + 1) return;
-			$cut = strlen($this->langSegment) + strlen($this->rootPageName) + 2;
-			$e->return = '/'.$this->langSegment.substr($e->return, $cut);
-		}
+
+		else if (strlen($cut) && strpos($e->return, "$cut/")) $e->return = str_replace("$cut/", '', $e->return);
 	}
 
 	/**
-	 * check config settings
+	 * get or verify homeSegment by name or language id or object
+	 * compares given string argument with name of root page (homeSegment)
+	 * modifies property language on success
+	 * @param  string|int|object $langIndicator
+	 * @return bool|string $homeSegment
+	 */
+	protected function getHomeSegment($langIndicator = '') {
+		if (!$this->languageSupport) return '';
+		if (is_string($langIndicator) && strlen($langIndicator)) {
+			foreach($this->wire('languages') as $language) {
+				$pageName = $this->wire('pages')->get(1)->get("name$language|name");
+				if ($pageName === $langIndicator) {
+					// verified!
+					$this->language = $language;
+					return $pageName;
+				}
+			}
+		}
+		$pageName = $this->wire('pages')->get(1)->get("name$langIndicator|name");
+		if ($pageName == Pages::defaultRootName) return '';
+		return $pageName;
+	}
+
+	/**
+	 * get a language sensitive path segment between two pages lacking homeSegment, leading and trailing slashes
+	 * @param Page object $to
+	 * @param Page object $from
+	 * @param null|Language object $language
+	 * @return string e.g. name/name/name
+	 */
+	protected function getPagePathSegment(Page $to, Page $from, $language = '') {
+		
+		if($to == $from) return '';	
+		if (!$to->parents()->has($from)) return false;
+
+		// default language or single language environment
+		$isDefault = true;
+		if ($this->languageSupport && $language instanceof Language) $isDefault = $language->isDefault();
+
+		$path = array();
+		$pages = $to->parentsUntil($from)->append($to);
+		foreach($pages as $page) {
+			$name = $isDefault ? $page->name : $page->get("name$language|name");
+			if (strlen($name)) $path[] = $name;
+		}
+
+		return implode($path,'/');
+	}
+
+	/**
+	 * check existence and accessibility of pages defined in config settings
 	 * @param  string $domain
 	 * @throws Exception
 	 */
 	protected function configCheck($domain) {
-		$ids = array('root' => $this->domains[$domain]['root']);
-		if (array_key_exists('http404', $this->domains[$domain])) $ids['http404'] = $this->domains[$domain]['http404'];
-		foreach ($ids as $key => $id) {
+		foreach ($this->domains[$domain] as $key => $id) {
+			if (!is_int($id)) throw new WireException(sprintf("Expecting integer value (\$page->id). %s given. Check \$config->MultisiteDomains['$domain']['$key'].", $id));
 			$page = $this->wire('pages')->get($id);
 			if ($page instanceof NullPage) throw new WireException(sprintf("The page with ID = %s doesn't exist. Check \$config->MultisiteDomains['$domain']['$key'].", $id));
 		}
