@@ -160,7 +160,7 @@ class Multisite extends WireData implements Module {
 			$slash = ($this->page->id && $this->page->template->slashUrls)? '/' : '';
 
 			// redirect if $_GET['it'] doesn't match LanguageSupportPageNames::useHomeSegment setting
-			if ($this->languageSupport && $this->rootPage == $this->page) {
+			if ($this->language->isDefault() && $this->languageSupport && $this->rootPage == $this->page) {
 				if ($this->useHomeSegment && $this->it != $homeSegment.$slash) $this->wire('session')->redirect("/$homeSegment$slash");
 				if (!$this->useHomeSegment && $this->it == $homeSegment.$slash) $this->wire('session')->redirect("/");
 			}
@@ -223,7 +223,8 @@ class Multisite extends WireData implements Module {
 
 		if ($page == $this->rootPage) {
 			$homeSegment = $this->getHomeSegment($language);
-			if ($language instanceof Language && $language->isDefault() && (!$homeSegment || $this->useHomeSegment == '0')) $e->return = '/';
+			$useHomeSegment = $this->wire('modules')->get('LanguageSupportPageNames')->useHomeSegment;
+			if ($language instanceof Language && $language->isDefault() && $useHomeSegment == '0') $e->return = '/';
 			else $e->return = $page->template->slashUrls? "/$homeSegment/" : "/$homeSegment";
 		}
 
