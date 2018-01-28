@@ -11,13 +11,14 @@
  * @copyright © 2017 Christoph Thelen
  * @license Licensed under MIT, see LICENSE.txt
  * @link https://processwire.com/talk/topic/...
- * @version 2.0.0
+ * @version 2.0.1
  * @since 1.0.0 init - 2017/05/09
  * @since 1.0.1 default rootpage, domain related access control for MultisitePageTree, fixed path bug - 2017/05/10
  * @since 1.0.2 fixed root page path issue in single language mode FORCE $page->template->slashUrls for rootPage - 2017/05/10
  * @since 1.0.3 fixed issue other language rootPageName, let hook modify Page view urls in admin too, take in account slashUrl and useHomeSegment settings - 2017/05/13
  * @since 1.0.4 show warning if hooked methods are not hookable - 2017/06/22
  * @since 2.0.0 major upgrade, root page of any MultisitePageTree can be placed elsewhere in the pagetree - 2018/01/26
+ * @since 2.0.1 bugfixes - 2018/01/28
  * @todo
  * - modify ProcessPageList::executeNavJSON() Change $parentID from hardcoded 1 to $config->rootPageID to get proper results Pages > Tree
  * - make hookable core function LanguageSupportPageNames::getPagePath() for proper language support
@@ -35,7 +36,7 @@
  * - root page of a Multisite page tree can be placed elsewhere in the ProcessWire page tree
  *
  * REQUIREMENTS
- * For a proper multilanguage support a page name for the default language and any other language must be assigned to the superRoot page
+ * proper multilanguage support requires a page name for the default language and any other language for the superRoot page
  *
  * SETUP
  * in config.php
@@ -70,7 +71,7 @@ class Multisite extends WireData implements Module {
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Multisite',
-			'version' => 200,
+			'version' => 201,
 			'summary' => 'Allows multiple sites with different domains run from single PW-site and database.',
 			'href' => 'https://github.com/kixe/Multisite',
 			'singular' => true,
@@ -160,7 +161,7 @@ class Multisite extends WireData implements Module {
 			$slash = ($this->page->id && $this->page->template->slashUrls)? '/' : '';
 
 			// redirect if $_GET['it'] doesn't match LanguageSupportPageNames::useHomeSegment setting
-			if ($this->language->isDefault() && $this->languageSupport && $this->rootPage == $this->page) {
+			if ($this->languageSupport && $this->language->isDefault() && $this->rootPage == $this->page) {
 				if ($this->useHomeSegment && $this->it != $homeSegment.$slash) $this->wire('session')->redirect("/$homeSegment$slash");
 				if (!$this->useHomeSegment && $this->it == $homeSegment.$slash) $this->wire('session')->redirect("/");
 			}
@@ -221,7 +222,8 @@ class Multisite extends WireData implements Module {
 		$cut = $this->getPagePathSegment($this->rootPage, $this->wire('pages')->get(1), $language);
 		if ($cut === false) return;
 
-		if ($page == $this->rootPage) {
+		// special case multilanguage + homepage
+		if ($language && $page == $this->rootPage) {
 			$homeSegment = $this->getHomeSegment($language);
 			$useHomeSegment = $this->wire('modules')->get('LanguageSupportPageNames')->useHomeSegment;
 			if ($language instanceof Language && $language->isDefault() && $useHomeSegment == '0') $e->return = '/';
