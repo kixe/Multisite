@@ -21,16 +21,17 @@ Yes, [kind of](https://processwire.com/api/modules/multi-site-support/). It allo
 - take in account `LanguageSupportPagenames::useHomeSegment` settings
 - Fallback to default 404 page if custom 404 is not set
 - Throws exception in case of misconfiguration
-- Access of pages residing inside a MultisitePageTree for other domains other than the corresponding root page is disallowed except for superuser
-- Pages inside a MultisitePageTree accessible only via url based on to the corresponding domain (404 instead of unexpected redirects)
+- Access of pages residing inside a MultisitePageTree for other domains other than the corresponding domain is disallowed except for superuser.
+- Pages inside a MultisitePageTree accessible only via url based on the corresponding domain. Otherwise a 404 instead of unexpected redirects.
 - Page paths are set via hook in `Page::path()` instead of modifying the return of `Page::render()`
 - Crosslink support via the RTE (CK Editor) Link plugin
-- Page view links in admin with correctly modified urls
+- Page view links in admin with correctly modified urls. For the branch related to calling domain only.
+- You can place your root branch elsewhere, no need to place at the first child level under home.
   
 ## How to use it?
 Just create pages under the root page and add these in the `config.php` by setting `$config->MultisiteDomains`.
 
-### Add MultisiteDomains
+### Add MultisiteDomains in config.php
 ```php
 $config->MultisiteDomains = array(
     "example.com" => array( // domain name is used to map to root page
@@ -45,10 +46,11 @@ $config->MultisiteDomains = array(
 
 
 ### Requirements  
-+ All multisite root pages must be child pages of the original root page*
-<small>*Page with id=1</small>
++ A proper multilanguage support requires a page name for the default language and any other language for the superRoot page*
+<small>  
+*Page with id=1</small>
 
-### httpHosts setup
+### httpHosts setup in config.php
 ```php
 /**
  * HTTP Hosts Whitelist
@@ -69,58 +71,9 @@ $config->MultisiteDomains = array(
 $config->httpHosts = array_unique(array_merge($config->httpHosts, array_keys($config->MultisiteDomains)));
 ```
 
-### Domains
-Make sure all domains points to the same server and directory.
-
-### Good to know: some variables
-```php
-// get current domain
-echo $modules->get('Multisite')->domain;
-[dev]  'dev.domain1.com'
-[live] 'domain1.com'
-
-// get current site root
-$siteRoot = $page->rootParent;
-echo $siteRoot->name // root page name
-[dev]  'www.domain1.com'
-[live] 'www.domain1.com'
-
-// use it as navigation starting point
-foreach ($siteRoot->children as $child) {
-  echo $child->title;
-}
-```
-
-### TroubleShooting
-
-#### Wrong page tree structure
-
-```
-- Homepage (main site home)
-   - Example Page
-   - 404 Page
-   - Contact Page
-   - www.domain2.com (a second site home)
-     - 404 Page
-   ...
-
-```
-
-But this wasn't ever recommended and it can lead to complications.
-
-#### Domains are missing insite httpHosts
-Check that all domains for the specific environment are included inside `$config->httpHosts`.
-
-#### DNS Record is not set properly
-The DNS Record of all domains must point to the same server.
-
-#### Domains point to a wrong directory
-All domains must point to the same directory.
-
-#### Multi-language Domains are not working
-Make sure the **LanguageSupportPageNames** module is installed.
-
 ### modified API Vars
+The following API Vars are modified by the module.  
+
 + `$page->url`
 + `$page->httpUrl`
 + `$page->path`
@@ -130,7 +83,5 @@ Make sure the **LanguageSupportPageNames** module is installed.
    
 ### Important
 This module doesn't provide new API vars and your templates doesn't know about this module (except the modified API vars). You have to use the ProcessWire API in the same way as in a single site environment.
-  
-## Please try out and let me know how it works!
 
 
