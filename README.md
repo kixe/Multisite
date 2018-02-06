@@ -47,9 +47,7 @@ $config->MultisiteDomains = array(
 
 
 ### Requirements  
-+ A proper multilanguage support requires a page name for the default language and any other language for the superRoot page*
-<small>  
-*Page with id=1</small>
++ A proper multilanguage support requires a page name for the default language and any other language for the superRootPage (Page with id=1)  
 + Currently LanguageSupportPageNames::getPagePath() is not hookable. This core function must be changed to  hookable otherwise language support doesn't work. Please support this feature request: [https://github.com/processwire/processwire-requests/issues/94](https://github.com/processwire/processwire-requests/issues/94)
 
 ### httpHosts setup in config.php
