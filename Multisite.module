@@ -54,19 +54,19 @@
 class Multisite extends WireData implements Module {
 
 	// set by constructor
-	public $domains = array(); // settings array $config->MultisiteDomains
-	public $domain = null; // null/string $config->httpHost if item key of $config->MultisiteDomains
-	public $rootPageID = 1; // page id of root page related to domain
-	public $languageSupport = false; // runtime true if LanguageSupportPageNames is installed
-	public $useHomeSegment = "0"; // string "0" or "1" runtime LanguageSupportPageNames::useHomeSegment
-	public $it = ''; // string sanitized $_GET['it'] if set
+	protected $domains = array(); // settings array $config->MultisiteDomains
+	protected $domain = null; // null/string $config->httpHost if item key of $config->MultisiteDomains
+	protected $rootPageID = 1; // page id of root page related to domain
+	protected $languageSupport = false; // runtime true if LanguageSupportPageNames is installed
+	protected $useHomeSegment = "0"; // string "0" or "1" runtime LanguageSupportPageNames::useHomeSegment
+	protected $it = ''; // string sanitized $_GET['it'] if set
 
 	// set by init()
-	public $rootPage = null; // page object, instance of root page related to domain
-	public $rootPagePath = ''; // language sensitive page path of root page (related to domain)
-	public $language = null; // request is default language
-	public $homeSegment = ''; // 
-	public $page = null; // page object, page to be rendered
+	protected $rootPage = null; // page object, instance of root page related to domain
+	protected $rootPagePath = ''; // language sensitive page path of root page (related to domain)
+	protected $language = null; // request is default language
+	protected $homeSegment = ''; // 
+	protected $page = null; // page object, page to be rendered
 
 	public static function getModuleInfo() {
 		return array(
