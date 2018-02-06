@@ -1,6 +1,7 @@
 # Multisite module for ProcessWire
-Complete rewrite of Multisite Module.
-The basic module was written by Antti Peisa and forked by Philipp "Soma" Urlich (_"not much left from the original module and fork, but the basic concept is the same"_).
+Complete rewrite of Multisite Module.  (_"not much left from the original module and fork, but the basic concept is the same"_).
+
+The basic module was written by Antti Peisa and forked by Philipp "Soma" Urlich
 
 * [Github: Multisite](https://github.com/kixe/Multisite) by Christoph Thelen aka @kixe  
 * [Github: Multisite](https://github.com/somatonic/Multisite) by Philipp "Soma" Urlich
@@ -18,7 +19,7 @@ Yes, [kind of](https://processwire.com/api/modules/multi-site-support/). It allo
 - Do not worry about page naming. The root page is defined via ID.
 - Full multilanguage support
 - take in account `$template->slashUrl` settings
-- take in account `LanguageSupportPagenames::useHomeSegment` settings
+- take in account `LanguageSupportPageNames::useHomeSegment` settings
 - Fallback to default 404 page if custom 404 is not set
 - Throws exception in case of misconfiguration
 - Access of pages residing inside a MultisitePageTree for other domains other than the corresponding domain is disallowed except for superuser.
@@ -49,6 +50,7 @@ $config->MultisiteDomains = array(
 + A proper multilanguage support requires a page name for the default language and any other language for the superRoot page*
 <small>  
 *Page with id=1</small>
++ Currently LanguageSupportPageNames::getPagePath() is not hookable. This core function must be changed to  hookable otherwise language support doesn't work. Please support this feature request: [https://github.com/processwire/processwire-requests/issues/94](https://github.com/processwire/processwire-requests/issues/94)
 
 ### httpHosts setup in config.php
 ```php
