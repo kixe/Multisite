@@ -35,6 +35,7 @@
  * - auto modification of view links in backend
  * - domain related access control of MultiSiteTree (shows 404 if doesn't match)
  * - root page of a Multisite page tree can be placed elsewhere in the ProcessWire page tree
+ * - Support of redirects
  *
  * REQUIREMENTS MULTILANGUAGE
  * LanguageSupportPageNames installed
@@ -200,7 +201,6 @@ class Multisite extends WireData implements Module {
 		$pageTreeIDs[] = $this->wire('page')->id;
 		$multisiteRootIDs = array_map(function($i) { return $i = $i['root']; }, $this->domains);
 		$matches = array_intersect($multisiteRootIDs, $pageTreeIDs);
-		var_dump($this->wire("config")->http404PageID);exit();
 		if ($this->wire('page')->id == $this->wire("config")->http404PageID || empty($matches)) return;
 		reset($matches);
 		if (in_array($this->domain, array_keys($matches))) return;

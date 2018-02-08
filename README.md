@@ -46,7 +46,7 @@ $config->MultisiteDomains = array(
             "http404" => 1029 // custom 404 page
         )
 		 "example.de" => array(
-            "root" => https://example.org // redirect
+            "root" => "https://example.org" // redirect
         )
 );
 ```
